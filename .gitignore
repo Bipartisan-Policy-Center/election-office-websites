@@ -1,1 +1,4 @@
-data/
+dotgov/data/
+ctcl/data/
+.DS_Store
+.venv/
