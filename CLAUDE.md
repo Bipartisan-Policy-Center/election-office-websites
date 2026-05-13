@@ -52,11 +52,13 @@ dotgov/data/
 ### 2026 results (as of May 2026)
 | Grouping | 2022 | 2024 | 2026 |
 |---|---|---|---|
-| All jurisdictions | 25% (1747/7010) | 31% (2138/6990) | 37% (2499/6699) |
-| County-equivalents | 31% (866/2764) | 39% (1131/2922) | 47% (1300/2798) |
-| 20 most populous counties | 42% (8/19) | 53% (10/19) | 58% (11/19) |
+| All jurisdictions | 25% (1747/7010) | 31% (2138/6990) | 38% (2641/6907) |
+| County-equivalents | 31% (866/2764) | 39% (1131/2922) | 47% (1374/2906) |
+| 20 most populous counties | 42% (8/19) | 53% (10/19) | 63% (12/19) |
 
-Notable changes since 2024: San Bernardino County CA and Wayne County MI adopted .gov; Santa Clara County CA moved from `vote.santaclaracounty.gov` to `sccgov.org` (the .gov subdomain still exists but CTCL updated the listed URL).
+Notable changes since 2024: San Bernardino County CA, Santa Clara County CA, and Wayne County MI all adopted .gov.
+
+Note on methodology: the 2026 crawl starts from the 2024 final destination (not the original CTCL-listed URL) to avoid false regressions where an office completed a .gov migration and retired their old redirect. Santa Clara is an example: their CTCL-listed URL stopped redirecting to `vote.santaclaracounty.gov` after the migration was complete, which would have incorrectly counted as a regression under the old methodology.
 
 ---
 

@@ -1,19 +1,20 @@
 """
 BPC PROJECT: Re-crawl the election office dataset to get current redirect URLs.
 
-Reads data/LEO_combined.csv (same dataset used for the 2022→2024 analysis,
-with is_primary_leo and other fields intact).
+Reads LEO_combined_2024.csv (the canonical BPC dataset with is_primary_leo).
+For each office, the crawl starts from the previous cycle's final destination
+(--prev-redirects) rather than the original CTCL-listed URL. This avoids
+false regressions where an office completed a .gov migration and retired their
+old redirect — we follow where they actually are now, not where they used to be.
 
-Every URL is visited fresh — we can't know whether a site now redirects to .gov
-without checking, even if the listed URL hasn't changed.
+If no --prev-redirects file is given, falls back to the original CTCL URL.
 
 Progress is saved every SAVE_INTERVAL rows so the script is safe to interrupt
 and resume. Re-running will pick up where it left off.
 
-Output: data/LEO_combined_with_redirects_2026.csv
-
 Usage:
-    python fetch_redirects.py
+    python fetch_redirects.py --prev-redirects data/2024/LEO_combined_redirects_2024.csv
+    python fetch_redirects.py   # falls back to original CTCL URLs
 """
 
 import urllib.parse
@@ -115,7 +116,26 @@ def classify_status(website: str, redirect: str) -> str:
 # ── main ───────────────────────────────────────────────────────────────────
 
 def main():
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--prev-redirects", type=Path, default=None,
+                        help="Previous cycle's redirects CSV; its website_redirect column "
+                             "is used as the starting URL instead of the original CTCL URL.")
+    args = parser.parse_args()
+
     df = pd.read_csv(INPUT)
+
+    # Use previous cycle's final destinations as starting URLs where available
+    if args.prev_redirects:
+        prev = pd.read_csv(args.prev_redirects)[["Office UUID", "website_redirect"]]
+        prev = prev[prev["website_redirect"].notna() & (prev["website_redirect"] != "All endpoints failed")]
+        prev = prev.rename(columns={"website_redirect": "website_prev"})
+        df = df.merge(prev, on="Office UUID", how="left")
+        df["website_start"] = df["website_prev"].fillna(df["website"])
+        df = df.drop(columns=["website_prev"])
+        print(f"Using previous redirects for {prev['Office UUID'].isin(df['Office UUID']).sum()} rows.")
+    else:
+        df["website_start"] = df["website"]
 
     # Resume from partial output if it exists
     if OUTPUT.exists():
@@ -129,17 +149,17 @@ def main():
         remaining["website_redirect"] = None
         remaining["website_status"] = None
 
-    pending = remaining[remaining["website"].notna()].index
-    print(f"Crawling {len(pending)} URLs (skipping {remaining['website'].isna().sum()} rows with no website) …")
+    pending = remaining[remaining["website_start"].notna()].index
+    print(f"Crawling {len(pending)} URLs (skipping {remaining['website_start'].isna().sum()} rows with no website) …")
 
     for i, idx in enumerate(tqdm(pending)):
-        url = remaining.at[idx, "website"]
+        url = remaining.at[idx, "website_start"]
         try:
             redirect = get_final_url(url)
         except Exception as e:
             redirect = f"Error: {type(e).__name__}"
         remaining.at[idx, "website_redirect"] = redirect
-        remaining.at[idx, "website_status"] = classify_status(url, redirect)
+        remaining.at[idx, "website_status"] = classify_status(remaining.at[idx, "website"], redirect)
 
         if (i + 1) % SAVE_INTERVAL == 0:
             out = pd.concat([done, remaining], ignore_index=True) if not done.empty else remaining
