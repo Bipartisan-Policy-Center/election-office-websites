@@ -8,8 +8,8 @@ In 2022, analysis by the Center for Democracy & Technology found that only 25% o
 
 We analyzed a dataset maintained by the Center for Tech and Civic Life (CTCL) consisting of websites and contact information for all local election offices across the country. We found the following changes since our last update:
 
-- Of approximately 6,700 unique local election websites, the share using the .gov domain has increased from 31% to 38%. (We should note that this grouping overrepresents states like Wisconsin and Michigan that administer elections at the sub-county level, such as by town.)
-- Adoption by the approximately 2,800 websites associated with counties and county equivalents increased from 39% to 47%.
+- Of approximately 6,900 unique local election websites, the share using the .gov domain has increased from 31% to 38%. (We should note that this grouping overrepresents states like Wisconsin and Michigan that administer elections at the sub-county level, such as by town.)
+- Adoption by the approximately 2,900 websites associated with counties and county equivalents increased from 39% to 47%.
 - Among the 20 most populous counties according to the 2020 Census enumeration—together home to over 60 million Americans—usage of the .gov domain increased from 53% to 63%, with San Bernardino County, CA, Santa Clara County, CA, and Wayne County, MI, all adopting .gov since our last update.
 
 ## Why should election offices have .gov websites?
@@ -54,6 +54,6 @@ For each office with a listed website, we wrote a program to visit that office's
 
 Where multiple offices in the same jurisdiction shared a final domain, we counted that website once, attributing it to the primary election office.
 
-To identify county-equivalent jurisdictions, we matched jurisdiction names against the Census Bureau's 2023 County Adjacency File, which enumerates all counties and county equivalents across the 50 states and D.C. (excluding Puerto Rico). This produced a subset of 2,824 unique websites in 2026, compared to 2,922 in 2024; the decrease reflects offices whose websites were no longer reachable at the time of our 2026 crawl, and are therefore excluded from the analysis.
+To identify county-equivalent jurisdictions, we matched jurisdiction names against the Census Bureau's 2023 County Adjacency File, which enumerates all counties and county equivalents across the 50 states and D.C. (excluding Puerto Rico). This produced a subset of 2,906 unique websites in 2026, compared to 2,922 in 2024; the decrease reflects offices whose websites were no longer reachable at the time of our 2026 crawl, and are therefore excluded from the analysis.
 
 Our 2022 figures are drawn from prior analysis by the Center for Democracy & Technology; our 2024 figures are from our [July 2024 analysis](https://bipartisanpolicy.org/blog/more-election-offices-are-adopting-verified-gov-websites).
