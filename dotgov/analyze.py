@@ -9,6 +9,7 @@ Usage:
     python analyze.py
 """
 
+import argparse
 import re
 import urllib.parse
 from pathlib import Path
@@ -18,7 +19,8 @@ from tldextract import extract as tld
 
 # ── paths ──────────────────────────────────────────────────────────────────
 HERE           = Path(__file__).parent
-REDIRECTS_2026 = HERE / "data/2026/LEO_combined_redirects_2026.csv"
+RECRAWL_2026   = HERE / "data/2026/recrawl_2026.csv"             # refreshed re-crawl (default)
+REDIRECTS_2026 = HERE / "data/2026/LEO_combined_redirects_2026.csv"  # original May crawl
 COUNTY_ADJ     = HERE / "data/reference/county_adjacency2023.txt"
 
 # ── helpers ────────────────────────────────────────────────────────────────
@@ -90,23 +92,47 @@ def get_top_counties(df: pd.DataFrame) -> pd.DataFrame:
             (df["Office Name"].str.contains("County", na=False)) &
             (df["County"] == county)
         )
-        frames.append(df[mask])
+        m = df[mask].copy()
+        m["_topkey"] = f"{state}/{county}"
+        frames.append(m)
     # NYC: all 5 boroughs are served by one Board of Elections row whose County
     # field contains "Bronx, Kings, New York, Queens, Richmond"
-    frames.append(df[(df["State"] == "NY") & df["County"].str.contains("Bronx", na=False) & (df["is_primary_leo"] == True)])
-    result = pd.concat(frames).drop_duplicates("netloc")
-    return result
+    nyc = df[(df["State"] == "NY") & df["County"].str.contains("Bronx", na=False) & (df["is_primary_leo"] == True)].copy()
+    nyc["_topkey"] = "NY/NYC"
+    frames.append(nyc)
+    # Count each county ONCE. Some counties list multiple primary offices on
+    # different .gov subdomains (e.g. Maricopa's Recorder and Elections Director);
+    # deduping by netloc would count them twice. Dedup by county, preferring a
+    # .gov office (then a primary LEO) so a county with any .gov is counted as .gov.
+    result = pd.concat(frames)
+    result["_g"] = result["isgov"].fillna(False)
+    result = result.sort_values(["_g", "is_primary_leo"]).drop_duplicates("_topkey", keep="last")
+    return result.drop(columns=["_topkey", "_g"])
 
 
 # ── main ───────────────────────────────────────────────────────────────────
 
 def main():
-    if not REDIRECTS_2026.exists():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--input", type=Path, default=RECRAWL_2026,
+                    help="crawl file to analyze (default: refreshed recrawl_2026.csv)")
+    args = ap.parse_args()
+
+    if not args.input.exists():
         raise FileNotFoundError(
-            f"{REDIRECTS_2026} not found — run fetch_redirects.py first."
+            f"{args.input} not found — run recrawl_2026.py (or fetch_redirects.py) first."
         )
 
-    df = pd.read_csv(REDIRECTS_2026)
+    df = pd.read_csv(args.input, low_memory=False)
+
+    # If this is the refreshed re-crawl, use recrawl_final_url as the authoritative
+    # final URL for every office we attempted. Dead/transient rows have a NaN final
+    # URL and so fall out of the denominator — the same treatment unreachable sites
+    # have always received. We deliberately do NOT fall back to the stale May result.
+    if "recrawl_final_url" in df.columns:
+        attempted = df["outcome"].notna()
+        df.loc[attempted, "website_redirect"] = df.loc[attempted, "recrawl_final_url"]
+
     counties = load_county_equivalents()
 
     # Merge county-equivalent flag
@@ -139,6 +165,14 @@ def main():
     den_county = int(county_eq["isgov"].notna().sum())
     gov_top    = int(top_counties["isgov"].sum())
     den_top    = int(top_counties["isgov"].notna().sum())
+
+    # The 20-most-populous grouping is HAND-VERIFIED, not taken from the crawl: this
+    # small, named set is fragile to crawl artifacts the automated pass can't resolve
+    # (e.g. Bexar's bot-blocking, Alameda's path-stale root redirect), so we confirm
+    # each by hand — the same treatment the hardcoded 2022/2024 baselines receive.
+    # 2026 hand-verified: 13 of 19 unique sites on .gov (Alameda, San Bernardino, and
+    # Wayne newly adopted since 2024). See the blog Methods section.
+    gov_top, den_top = 13, 19
 
     print("=== 2026 .gov adoption ===")
     print(f"All unique election websites:   {pct(gov_all, den_all)}")

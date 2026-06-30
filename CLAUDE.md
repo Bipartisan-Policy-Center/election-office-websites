@@ -32,14 +32,23 @@ dotgov/data/
 │                                        and website_status appended.
 │   ├── comparison_2022_2024.csv/.xlsx   Intermediate analysis output from the 2024 cycle.
 └── 2026/
-    ├── LEO_combined_redirects_2026.csv  2026 crawl output: output of fetch_redirects.py.
+    ├── LEO_combined_redirects_2026.csv  May 2026 crawl (fetch_redirects.py). Superseded as the
+    │                                    headline source by recrawl_2026.csv; kept for comparison.
+    ├── recrawl_2026.csv                 AUTHORITATIVE 2026 crawl (recrawl_2026.py). Carries the May
+    │                                    columns plus recrawl_final_url, outcome, recrawl_isgov,
+    │                                    via_root, carried_forward. This is what analyze.py reads.
+    ├── recrawl_2026_provenance.json     Crawl completion date, CTCL export, outcome counts.
+    ├── featured_{WA,RI,UT,NY}.csv       Per-state primary-LEO lists for hand-verification.
     └── dotgov_trend_2026.csv            Datawrapper import table: numerators, denominators, and
                                          percentages for all three groupings across 2022/2024/2026.
 ```
+The `.gov` registry approach (cisagov/dotgov-data) was evaluated and **rejected** — it overcounts (credits jurisdiction-level `.gov` ownership, not the election site). Any `registry_*` files are orphaned and safe to delete.
 
 ### Scripts
-- `dotgov/fetch_redirects.py` — re-crawls every URL in `LEO_combined_2024.csv` fresh (no caching — we can't know if a redirect changed without visiting), follows redirects, records the final URL. Resumable: saves every 200 rows, skips already-completed UUIDs on restart. Output: `2026/LEO_combined_redirects_2026.csv`.
-- `dotgov/analyze.py` — reads the redirects file, merges county-equivalent flags from `reference/county_adjacency2023.txt`, computes `isgov` from the final URL's TLD, deduplicates by netloc (preferring `is_primary_leo=True` rows), prints statistics, and saves `2026/dotgov_trend_2026.csv` for import into Datawrapper.
+- `dotgov/recrawl_2026.py` — **the 2026 crawler** (supersedes fetch_redirects.py). Concurrent, idempotent, resumable. Builds ordered candidate URLs per office (prior-cycle `.gov` dest → fresh March 2026 CTCL URL → prior dest → original) and follows redirects, with: `.gov`-wins (stop at first candidate resolving to `.gov`); classification by final-URL TLD regardless of status; **bare-root fallback** (when a listed path 404s, retry the bare domain — upgrade to `.gov` only, never downgrade a live non-`.gov`); **carry-forward** (a confirmed `.gov` is never regressed by a failure to reach it); and a **transient-vs-dead** split so low timeouts are safe (re-runs retry transient). Flags: `--fresh`, `--finalize-transient`, `--reconcile-only`. Output: `2026/recrawl_2026.csv`.
+- `dotgov/fetch_redirects.py` — the older (May 2026) single-pass crawler; produced `LEO_combined_redirects_2026.csv`. Kept for the comparison baseline.
+- `dotgov/analyze.py` — reads the crawl via `--input` (default `recrawl_2026.csv`), using `recrawl_final_url` as the authoritative final URL; merges county-equivalent flags, computes `isgov` from TLD, deduplicates by netloc (preferring `is_primary_leo=True`), prints stats, and saves `2026/dotgov_trend_2026.csv`. The **top-20 figure is hardcoded hand-verified** (the crawl can't resolve bot-blocked/path-stale top counties); treated like the 2022/2024 baselines.
+- `dotgov/compare_crawls.py` — quantifies movement between the May crawl and the refreshed re-crawl, and flags `.gov`→non-`.gov` regressions.
 
 ### Key methodology decisions
 - **Unit of analysis**: unique netlocs among `is_primary_leo == True` rows. This matches CDT's 2022 methodology and allows year-over-year comparison.
@@ -48,17 +57,21 @@ dotgov/data/
 - **Top 20 counties**: hardcoded list by 2020 Census population (`TOP_20` in `analyze.py`). NYC is a special case — all five boroughs are served by one Board of Elections row whose `County` field contains all five borough names.
 - **No SSL verification**: `verify=False` throughout. Many election sites have certificate issues that don't affect real-world accessibility.
 - **Historical numbers**: 2022 figures are from CDT's analysis; 2024 figures are from BPC's July 2024 analysis. Both are hardcoded in `analyze.py`.
+- **Dual standard (new in 2026)**: the national figures are purely crawl-derived (a reproducible lower bound). The small, scrutinized sets — the 4 featured states (WA, RI, UT, NY) and the top-20 counties — are **hand-verified**, because a single crawl miss (e.g. Alameda's path-stale root redirect, Bexar's bot-blocking) visibly distorts a named figure. Crawl-derived featured-state denominators do NOT match true jurisdiction counts (CTCL's `is_primary_leo` over-covers UT with cities, under-covers RI, etc.), so do not overwrite hand-verified state numbers with crawl output.
+- **Lower-bound framing**: the national share is a conservative lower bound (offices mid-migration whose old domains haven't been retired are undercounted). Because the 2026 method recovers `.gov` sites the 2022/2024 methods missed, the rise over time is an *upper bound* on true growth — part is improved measurement.
 
-### 2026 results (as of May 2026)
+### 2026 results (refined re-crawl, June 2026)
 | Grouping | 2022 | 2024 | 2026 |
 |---|---|---|---|
-| All jurisdictions | 25% (1747/7010) | 31% (2138/6990) | 38% (2641/6907) |
-| County-equivalents | 31% (866/2764) | 39% (1131/2922) | 47% (1374/2906) |
-| 20 most populous counties | 42% (8/19) | 53% (10/19) | 63% (12/19) |
+| All jurisdictions | 24.9% (1747/7010) | 30.6% (2138/6990) | 44.0% (3123/7097) |
+| County-equivalents | 31.3% (866/2764) | 38.7% (1131/2922) | 53.6% (1612/3006) |
+| 20 most populous counties | 42.1% (8/19) | 52.6% (10/19) | 68.4% (13/19, hand-verified) |
 
-Notable changes since 2024: San Bernardino County CA, Santa Clara County CA, and Wayne County MI all adopted .gov.
+The refined re-crawl raised the headline from the May crawl's 38% to 44%, recovering +519 offices vs. May — ~71% from CTCL's fresh March 2026 URLs (stealth migrations the May crawl missed by following old addresses), the rest via `.gov`-wins, carry-forward, and the bare-root fallback (62 recoveries).
 
-Note on methodology: the 2026 crawl starts from the 2024 final destination (not the original CTCL-listed URL) to avoid false regressions where an office completed a .gov migration and retired their old redirect. Santa Clara is an example: their CTCL-listed URL stopped redirecting to `vote.santaclaracounty.gov` after the migration was complete, which would have incorrectly counted as a regression under the old methodology.
+Notable changes in the top-20 since 2024: San Bernardino County CA, Wayne County MI, and Alameda County CA newly adopted `.gov`. (Santa Clara was already `.gov` in 2024 via a `sccgov.org` → `.gov` redirect, so it is NOT a new adopter — a recurring point of confusion.)
+
+Note on methodology: the crawl starts from the prior cycle's final destination (not the original CTCL URL) to avoid false regressions where an office completed a `.gov` migration and retired its old redirect. Santa Clara is an example: its CTCL-listed URL stopped redirecting to `vote.santaclaracounty.gov` after the migration completed.
 
 ---
 
